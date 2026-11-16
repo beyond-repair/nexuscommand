@@ -25,9 +25,16 @@ function Gate() {
 }
 
 function Roster() {
-  const { data, error, loading } = useCompany<WorkforceView>("workforce");
+  const { data, error, loading, reload } = useCompany<WorkforceView>("workforce");
   if (loading && !data) return <p className="py-8 text-sm text-muted">Loading the workforce</p>;
-  if (!data) return <Alert>{error ?? "The workforce did not load."}</Alert>;
+  if (!data) {
+    return (
+      <div className="py-8">
+        <Alert>{error ?? "The workforce did not load."}</Alert>
+        <button type="button" className="mt-3 text-sm text-accent" onClick={reload}>Retry</button>
+      </div>
+    );
+  }
   return (
     <div className="py-6">
       <h1 className="text-2xl font-medium">Workforce</h1>

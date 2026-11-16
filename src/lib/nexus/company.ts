@@ -47,6 +47,14 @@ export const MISSION_PATH: readonly MissionStatus[] = [
 export const ASSIGNMENT_STATUSES = ["QUEUED", "READY", "RUNNING", "DONE", "FAILED"] as const;
 export type AssignmentStatus = (typeof ASSIGNMENT_STATUSES)[number];
 
+export const ASSIGNMENT_LABEL: Record<AssignmentStatus, string> = {
+  QUEUED: "Waiting",
+  READY: "Ready",
+  RUNNING: "Running",
+  DONE: "Done",
+  FAILED: "Failed",
+};
+
 export type DepartmentSeed = { slug: string; name: string; mandate: string };
 
 export const DEPARTMENTS: readonly DepartmentSeed[] = [
@@ -224,6 +232,86 @@ export function assertMissionTransition(from: MissionStatus, to: MissionStatus):
   if (!MISSION_TRANSITIONS[from].includes(to)) {
     throw new CompanyError(`Illegal transition ${from} → ${to}`);
   }
+}
+
+export function walksIntoCycle(
+  start: string,
+  parent: string,
+  depends: ReadonlyMap<string, string | null>,
+): boolean {
+  const seen = new Set([start]);
+  let cursor: string | null = parent;
+  for (let hop = 0; hop < 24 && cursor; hop += 1) {
+    if (seen.has(cursor)) return true;
+    seen.add(cursor);
+    cursor = depends.get(cursor) ?? null;
+  }
+  return Boolean(cursor);
+}
+
+export type MemoryDecision = {
+  state: "accepted" | "proposed";
+  confidence: "owner" | "stated" | "contested";
+  supersedes: string | null;
+  supersedePrior: boolean;
+  version: number;
+};
+
+/** Accepted text is a fact. A different unverified note is contested, not a replacement. */
+export function nextMemory(input: {
+  verified: boolean;
+  priorId: string | null;
+  priorBody: string | null;
+  body: string;
+  version: number;
+}): MemoryDecision {
+  const different = input.priorId != null && (input.priorBody ?? "").trim() !== input.body.trim();
+  if (different && input.verified) {
+    return {
+      state: "accepted",
+      confidence: "owner",
+      supersedes: input.priorId,
+      supersedePrior: true,
+      version: input.version,
+    };
+  }
+  if (different) {
+    return {
+      state: "proposed",
+      confidence: "contested",
+      supersedes: null,
+      supersedePrior: false,
+      version: input.version,
+    };
+  }
+  return {
+    state: input.verified ? "accepted" : "proposed",
+    confidence: input.verified ? "owner" : "stated",
+    supersedes: null,
+    supersedePrior: false,
+    version: input.version,
+  };
+}
+
+export type DataClass = "internal" | "confidential";
+
+export function providerDecision(input: { classification: DataClass; disclosure: "local" | "public" }): {
+  send: boolean;
+  provider: "pollinations" | "local";
+  reason: string;
+} {
+  if (input.classification === "confidential") {
+    return { send: false, provider: "local", reason: "Confidential work stays in this workspace." };
+  }
+  if (input.disclosure !== "public") {
+    return { send: false, provider: "local", reason: "Public disclosure is off." };
+  }
+  return { send: true, provider: "pollinations", reason: "Internal work is allowed on the public model." };
+}
+
+/** A passing report belongs to one hash. A later edit does not inherit it. */
+export function evidenceStillCovers(reportHash: string, artifactHash: string, status: string): boolean {
+  return status === "passed" && reportHash.length === 64 && artifactHash.length === 64 && reportHash === artifactHash;
 }
 
 export function departmentRank(slug: string): number {
@@ -461,6 +549,7 @@ export const CHECK_OWNER: Partial<Record<string, PipelineAgent>> = {
   "Interface specification": "designer",
   "Implementation source": "developer",
   "Working slice": "developer",
+  "Isolated execution": "developer",
   "No self-approval": "developer",
 };
 

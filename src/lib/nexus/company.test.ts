@@ -7,13 +7,17 @@ import {
   CompanyError,
   dollarsToCents,
   formatMoney,
+  evidenceStillCovers,
   localDraft,
   localPlan,
   nextDefects,
+  nextMemory,
   ownedChecksPass,
   planFromModel,
+  providerDecision,
   reworkFrom,
   verifyArtifacts,
+  walksIntoCycle,
 } from "./company.ts";
 
 test("a plan cannot jump straight to accepted", () => {
@@ -115,8 +119,8 @@ test("a fenced page with no control is not a working slice", () => {
   assert.equal(verifyArtifacts({ ...artifacts, developer: localDraft("developer", objective, "") }).find((item) => item.name === "Working slice")?.passed, true);
 });
 
-test("a failed working slice goes back to engineering", () => {
-  assert.equal(reworkFrom(["Working slice"], []), "developer");
+test("a failed isolated execution goes back to engineering", () => {
+  assert.equal(reworkFrom(["Isolated execution"], ["qa"]), "developer");
 });
 
 test("payment amounts are cents or nothing", () => {
@@ -126,6 +130,58 @@ test("payment amounts are cents or nothing", () => {
   assert.equal(dollarsToCents("0"), null);
   assert.equal(dollarsToCents("nope"), null);
   assert.equal(formatMoney(2550), "$25.50");
+});
+
+test("confidential work never leaves and a stale pass does not cover a new hash", () => {
+  assert.equal(providerDecision({ classification: "confidential", disclosure: "public" }).send, false);
+  assert.equal(providerDecision({ classification: "internal", disclosure: "local" }).send, false);
+  assert.equal(providerDecision({ classification: "internal", disclosure: "public" }).provider, "pollinations");
+  const hash = "a".repeat(64);
+  const other = "b".repeat(64);
+  assert.equal(evidenceStillCovers(hash, hash, "passed"), true);
+  assert.equal(evidenceStillCovers(hash, other, "passed"), false);
+  assert.equal(evidenceStillCovers(hash, hash, "failed"), false);
+});
+
+test("a dependency that loops is refused and a chain that ends is not", () => {
+  const chain = new Map<string, string | null>([
+    ["a", "b"],
+    ["b", "a"],
+    ["c", null],
+  ]);
+  assert.equal(walksIntoCycle("a", "b", chain), true);
+  assert.equal(walksIntoCycle("c", "a", chain), true);
+  assert.equal(walksIntoCycle("c", "c", chain), true);
+  const open = new Map<string, string | null>([
+    ["a", null],
+    ["b", "a"],
+  ]);
+  assert.equal(walksIntoCycle("c", "b", open), false);
+});
+
+test("accepted memory supersedes and an unverified contradiction does not", () => {
+  const first = nextMemory({ verified: true, priorId: null, priorBody: null, body: "Ship the desk.", version: 1 });
+  assert.equal(first.state, "accepted");
+  assert.equal(first.confidence, "owner");
+  const replaced = nextMemory({
+    verified: true,
+    priorId: "mem_1",
+    priorBody: "Ship the desk.",
+    body: "Ship the desk with invoices.",
+    version: 2,
+  });
+  assert.equal(replaced.supersedePrior, true);
+  assert.equal(replaced.supersedes, "mem_1");
+  const contested = nextMemory({
+    verified: false,
+    priorId: "mem_1",
+    priorBody: "Ship the desk.",
+    body: "Do not ship.",
+    version: 2,
+  });
+  assert.equal(contested.state, "proposed");
+  assert.equal(contested.confidence, "contested");
+  assert.equal(contested.supersedePrior, false);
 });
 
 test("rejection returns to the plan and cannot be accepted in place", () => {

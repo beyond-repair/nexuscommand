@@ -3,7 +3,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { PayCard, RunTokenNote } from "@/components/company-notes";
 import { Shell, useReadySession } from "@/components/shell";
 import { Alert, Button, controlClass, when } from "@/components/nexus-ui";
-import { agentBySlug, CHECK_OWNER, dollarsToCents, formatMoney, MISSION_LABEL, MISSION_PATH, reworkFrom } from "@/lib/nexus/company";
+import { agentBySlug, ASSIGNMENT_LABEL, CHECK_OWNER, dollarsToCents, formatMoney, MISSION_LABEL, MISSION_PATH, reworkFrom } from "@/lib/nexus/company";
 import type { MissionView } from "@/lib/nexus/company-store";
 import { companyCommand } from "@/lib/nexus/company-api";
 import { errorText, useCompany } from "@/lib/nexus/use-company";
@@ -37,6 +37,58 @@ function MissionBody({ missionId }: { missionId: string }) {
   const [note, setNote] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+
+  async function depend(value: string) {
+    setBusy("depend");
+    setFormError(null);
+    try {
+      await companyCommand({ data: { type: "depend", missionId, dependsOn: value } });
+      reload();
+    } catch (err) {
+      setFormError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function classify(value: string) {
+    setBusy("classification");
+    setFormError(null);
+    try {
+      await companyCommand({ data: { type: "classification", missionId, classification: value } });
+      reload();
+    } catch (err) {
+      setFormError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function parent(value: string) {
+    setBusy("parent");
+    setFormError(null);
+    try {
+      await companyCommand({ data: { type: "parent", missionId, parentId: value } });
+      reload();
+    } catch (err) {
+      setFormError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function priority(value: string) {
+    setBusy("priority");
+    setFormError(null);
+    try {
+      await companyCommand({ data: { type: "priority", missionId, priority: value } });
+      reload();
+    } catch (err) {
+      setFormError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(type: string) {
     setBusy(type);
@@ -95,7 +147,14 @@ function MissionBody({ missionId }: { missionId: string }) {
   }
 
   if (loading && !data) return <p className="py-8 text-sm text-muted">Opening the mission</p>;
-  if (!data) return <Alert>{error ?? "This mission did not load."}</Alert>;
+  if (!data) {
+    return (
+      <div className="py-8">
+        <Alert>{error ?? "This mission did not load."}</Alert>
+        <button type="button" className="mt-3 text-sm text-accent" onClick={reload}>Retry</button>
+      </div>
+    );
+  }
 
   const mission = data.mission;
   const status = mission.status;
@@ -140,7 +199,7 @@ function MissionBody({ missionId }: { missionId: string }) {
       </ol>
       {status === "ACCEPTED" ? <p className="mt-3 text-sm">Accepted. The packet is on the record.</p> : null}
       {status === "REJECTED" ? (
-        <p className="mt-3 text-sm text-muted">Rejected, after the packet was offered. Return to the plan and the departments run again. Rewrite the strategy if the plan itself was wrong.</p>
+        <p className="mt-3 text-sm text-muted">Rejected, after the packet was offered. Rewrite the strategy if the plan was wrong. Reset departments if you want the same plan to run again from the start.</p>
       ) : null}
       {status === "CANCELLED" ? (
         <p className="mt-3 text-sm text-muted">Cancelled. Departments that had not finished are closed. This does not delete the record.</p>
@@ -191,7 +250,7 @@ function MissionBody({ missionId }: { missionId: string }) {
         ) : null}
         {status === "REJECTED" ? (
           <Button variant="quiet" disabled={busy !== null} onClick={() => void act("reopen")}>
-            Return to the plan
+            {busy === "reopen" ? "Resetting…" : "Reset departments"}
           </Button>
         ) : null}
       </div>
@@ -211,6 +270,120 @@ function MissionBody({ missionId }: { missionId: string }) {
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
             {mission.questions.map((question) => (
               <li key={question}>{question}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {status === "PROPOSED" || status === "PLANNED" || status === "REJECTED" ? (
+        <section className="mt-8 max-w-xl">
+          <h2 className="text-sm font-medium">Depends on</h2>
+          <p className="mt-2 text-sm text-muted">Execution will not start until that mission is accepted. None means this mission stands alone.</p>
+          <select
+            value={mission.dependsOn ?? ""}
+            disabled={busy !== null || data.peers.length === 0}
+            onChange={(event) => void depend(event.target.value)}
+            className="mt-3 h-11 w-full rounded-md border border-line bg-bg px-3 text-sm"
+          >
+            <option value="">No dependency</option>
+            {data.peers.map((peer) => (
+              <option key={peer.id} value={peer.id}>{peer.title} · {peer.status}</option>
+            ))}
+          </select>
+        </section>
+      ) : mission.dependsOn ? (
+        <p className="mt-6 text-sm text-muted">
+          Depends on {data.peers.find((peer) => peer.id === mission.dependsOn)?.title ?? "another mission"}.
+        </p>
+      ) : null}
+
+      {status === "PROPOSED" || status === "PLANNED" || status === "REJECTED" ? (
+        <section className="mt-8 max-w-xl">
+          <h2 className="text-sm font-medium">Classification</h2>
+          <p className="mt-2 text-sm text-muted">Confidential work is never sent to a public model, even when public disclosure is on. Internal work may be, and only then.</p>
+          <select
+            value={mission.classification}
+            disabled={busy !== null}
+            onChange={(event) => void classify(event.target.value)}
+            className="mt-3 h-11 w-full rounded-md border border-line bg-bg px-3 text-sm"
+          >
+            <option value="internal">Internal</option>
+            <option value="confidential">Confidential</option>
+          </select>
+        </section>
+      ) : (
+        <p className="mt-6 text-sm text-muted">Classification: {mission.classification}.</p>
+      )}
+
+      {status === "PROPOSED" || status === "PLANNED" || status === "REJECTED" ? (
+        <section className="mt-8 max-w-xl">
+          <h2 className="text-sm font-medium">Parent objective</h2>
+          <p className="mt-2 text-sm text-muted">This does not start the mission. The parent cannot be accepted while this work is still open.</p>
+          <select
+            value={mission.parentId ?? ""}
+            disabled={busy !== null}
+            onChange={(event) => void parent(event.target.value)}
+            className="mt-3 h-11 w-full rounded-md border border-line bg-bg px-3 text-sm"
+          >
+            <option value="">No parent</option>
+            {data.peers.map((peer) => (
+              <option key={peer.id} value={peer.id}>{peer.title} · {peer.status}</option>
+            ))}
+          </select>
+        </section>
+      ) : mission.parentId ? (
+        <p className="mt-6 text-sm text-muted">Parent: {data.peers.find((peer) => peer.id === mission.parentId)?.title ?? "another mission"}.</p>
+      ) : null}
+
+      {status !== "ACCEPTED" && status !== "CANCELLED" ? (
+        <section className="mt-8 max-w-xl">
+          <h2 className="text-sm font-medium">Priority</h2>
+          <p className="mt-2 text-sm text-muted">Higher numbers are scheduled first. This does not authorize the mission.</p>
+          <select
+            value={String(mission.priority)}
+            disabled={busy !== null}
+            onChange={(event) => void priority(event.target.value)}
+            className="mt-3 h-11 w-full rounded-md border border-line bg-bg px-3 text-sm"
+          >
+            {[10, 30, 50, 70, 90].map((value) => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </select>
+        </section>
+      ) : (
+        <p className="mt-6 text-sm text-muted">Priority {mission.priority}.</p>
+      )}
+
+      <Milestone missionId={missionId} milestone={mission.milestone} busy={busy !== null} onDone={reload} onError={setFormError} />
+      <Specification missionId={missionId} busy={busy !== null} onDone={reload} onError={setFormError} />
+
+      {data.findings.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-sm font-medium">Findings</h2>
+          <ul className="mt-3 space-y-3">
+            {data.findings.map((finding) => (
+              <li key={finding.id}>
+                <p className="text-sm">{finding.title}</p>
+                <p className="mt-1 text-sm text-muted">{finding.evidence}</p>
+                <p className="mt-1 font-mono text-xs text-muted">{finding.severity} · {finding.confidence}{finding.ownerRequired ? " · owner" : ""}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {data.handoffs.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-sm font-medium">Handoffs</h2>
+          <ul className="mt-3 space-y-4">
+            {data.handoffs.map((handoff) => (
+              <li key={handoff.id} className="border-t border-line pt-3">
+                <p className="text-sm">{handoff.fromDepartment} → {handoff.toDepartment}</p>
+                <p className="mt-1 text-sm text-muted">Completed: {handoff.completed || "Nothing stored."}</p>
+                <p className="mt-1 text-sm text-muted">Still required: {handoff.outstanding}</p>
+                <p className="mt-1 text-sm text-muted">Criteria: {handoff.criteria}</p>
+                {handoff.risks ? <p className="mt-1 text-sm text-muted">Risks: {handoff.risks}</p> : null}
+              </li>
             ))}
           </ul>
         </section>
@@ -260,7 +433,7 @@ function MissionBody({ missionId }: { missionId: string }) {
             <Button variant="quiet" onClick={() => downloadSlice(slice, mission.title)}>Download the slice</Button>
             <Button variant="quiet" onClick={() => downloadPacket(mission.title, mission.objective, data.assignments)}>Download the packet</Button>
           </div>
-          <iframe title="Working slice" sandbox="allow-scripts" srcDoc={slice} className="mt-3 h-80 w-full border border-line bg-bg" />
+          <iframe title="Working slice" sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={slice} className="mt-3 h-80 w-full border border-line bg-bg" />
         </section>
       ) : null}
 
@@ -272,6 +445,38 @@ function MissionBody({ missionId }: { missionId: string }) {
         </div>
       ) : null}
 
+      {data.jobs.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-sm font-medium">Execution</h2>
+          <ul className="mt-2 space-y-1">
+            {data.jobs.map((job, index) => (
+              <li key={`${job.updatedAt}-${index}`} className="text-sm">
+                <span className="font-mono text-xs">{job.status}</span>
+                <span className="text-muted"> · attempt {job.attempt}</span>
+                {job.lastError ? <span className="mt-0.5 block text-muted">{job.lastError}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {data.qa ? (
+        <section className="mt-8 max-w-2xl">
+          <h2 className="text-sm font-medium">Independent verification</h2>
+          <p className="mt-1 font-mono text-xs text-muted">{data.qa.status} · {data.qa.suite || "nexus-qa"} · {data.qa.sha256.slice(0, 16)}</p>
+          <p className="mt-2 text-sm text-muted">{data.qa.detail}</p>
+          {data.qa.current ? null : (
+            <p className="mt-2 text-sm text-danger">This report does not cover the implementation that is stored now. A later edit does not keep the old pass.</p>
+          )}
+          <ul className="mt-3 space-y-1">
+            {data.qa.tests.map((item) => (
+              <li key={item.name} className={`font-mono text-xs ${item.passed ? "text-accent" : "text-danger"}`}>
+                {item.passed ? "pass" : "fail"} · {item.name}. {item.detail}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {data.defects.length > 0 ? (
         <section className="mt-8">
           <h2 className="text-sm font-medium">Open defects</h2>
@@ -304,7 +509,7 @@ function MissionBody({ missionId }: { missionId: string }) {
                     <span className="text-xs text-muted">{row.title}</span>
                   </span>
                   <span className={`font-mono text-xs ${row.status === "FAILED" ? "text-danger" : row.status === "DONE" ? "text-accent" : "text-muted"}`}>
-                    {row.status}
+                    {ASSIGNMENT_LABEL[row.status]}
                   </span>
                 </button>
                 {open === row.id ? (
@@ -348,6 +553,8 @@ function MissionBody({ missionId }: { missionId: string }) {
         <MissionLedger missionId={mission.id} rows={data.payments} poster={status === "AWAITING_ACCEPTANCE" || status === "ACCEPTED"} onChange={reload} />
       ) : null}
 
+      <TaskLinks missionId={mission.id} links={data.taskLinks} onChange={reload} />
+
       {data.audit.length > 0 ? (
         <section className="mt-10">
           <h2 className="text-sm font-medium">Record</h2>
@@ -364,6 +571,59 @@ function MissionBody({ missionId }: { missionId: string }) {
         </section>
       ) : null}
     </div>
+  );
+}
+
+function TaskLinks({
+  missionId,
+  links,
+  onChange,
+}: {
+  missionId: string;
+  links: MissionView["taskLinks"];
+  onChange: () => void;
+}) {
+  const [taskId, setTaskId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(type: "link-task" | "unlink-task", id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await companyCommand({ data: { type, missionId, note: id } });
+      setTaskId("");
+      onChange();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-8 max-w-xl">
+      <h2 className="text-sm font-medium">Task link</h2>
+      <p className="mt-2 text-sm text-muted">The owner can point this mission at an existing task. The link does not start either one, and removing it does not delete either record.</p>
+      {links.length === 0 ? <p className="mt-3 text-sm text-muted">No task is linked.</p> : (
+        <ul className="mt-3 space-y-2">
+          {links.map((link) => (
+            <li key={link.taskId} className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0">
+                <span className="block truncate">{link.projectName} · {link.objective}</span>
+                <span className="font-mono text-xs text-muted">{link.state} · {link.taskId}</span>
+              </span>
+              <Button variant="quiet" disabled={busy} onClick={() => void send("unlink-task", link.taskId)}>Remove</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); void send("link-task", taskId.trim()); }}>
+        <input value={taskId} onChange={(event) => setTaskId(event.target.value)} placeholder="Existing task id" className={controlClass} />
+        <Button disabled={busy || taskId.trim().length < 4}>Link</Button>
+      </form>
+      {error ? <div className="mt-3"><Alert>{error}</Alert></div> : null}
+    </section>
   );
 }
 
@@ -533,4 +793,80 @@ function workingSlice(artifact: string): string | null {
   if (loose?.[1]) return loose[1].trim();
   if (/^<!doctype html/i.test(artifact.trim())) return artifact.trim();
   return null;
+}
+
+function Milestone({
+  missionId,
+  milestone,
+  busy,
+  onDone,
+  onError,
+}: {
+  missionId: string;
+  milestone: string;
+  busy: boolean;
+  onDone: () => void;
+  onError: (message: string | null) => void;
+}) {
+  const [text, setText] = useState(milestone);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    onError(null);
+    try {
+      await companyCommand({ data: { type: "milestone", missionId, note: text } });
+      onDone();
+    } catch (err) {
+      onError(errorText(err));
+    }
+  }
+  return (
+    <form onSubmit={(event) => void save(event)} className="mt-8 max-w-xl">
+      <h2 className="text-sm font-medium">Milestone</h2>
+      <p className="mt-2 text-sm text-muted">A completion mark you write. It is not calculated.</p>
+      <input value={text} onChange={(event) => setText(event.target.value)} className={`${controlClass} mt-3`} placeholder="Invoices can be drafted from a job" />
+      <Button type="submit" variant="quiet" className="mt-3" disabled={busy}>{milestone ? milestone : "Save milestone"}</Button>
+    </form>
+  );
+}
+
+function Specification({
+  missionId,
+  busy,
+  onDone,
+  onError,
+}: {
+  missionId: string;
+  busy: boolean;
+  onDone: () => void;
+  onError: (message: string | null) => void;
+}) {
+  const [body, setBody] = useState("");
+  const [budget, setBudget] = useState("");
+  async function send(type: string, extra: { objective?: string; amount?: string } = {}) {
+    onError(null);
+    try {
+      await companyCommand({ data: { type, missionId, ...extra } });
+      if (type === "propose-spec") setBody("");
+      onDone();
+    } catch (err) {
+      onError(errorText(err));
+    }
+  }
+  return (
+    <section className="mt-8 max-w-xl">
+      <h2 className="text-sm font-medium">Specification</h2>
+      <p className="mt-2 text-sm text-muted">A new version is filed beside the accepted one. Accepting it does not accept the mission, and it does not reopen work that the change does not touch.</p>
+      <textarea value={body} onChange={(event) => setBody(event.target.value)} className={`${controlClass} mt-3 min-h-28 py-3`} placeholder="Invoices are drafted from a recorded job." />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" variant="quiet" disabled={busy || body.trim().length < 8} onClick={() => void send("propose-spec", { objective: body })}>File a new version</Button>
+        <Button type="button" variant="quiet" disabled={busy} onClick={() => void send("accept-spec")}>Accept this version</Button>
+        <Button type="button" variant="quiet" disabled={busy} onClick={() => void send("revalidate")}>Authorize the affected review</Button>
+      </div>
+      <label className="mt-4 block text-sm">
+        Mission budget
+        <input value={budget} onChange={(event) => setBudget(event.target.value)} inputMode="decimal" placeholder="40.00" className={`${controlClass} mt-1 h-11`} />
+      </label>
+      <Button type="button" variant="quiet" className="mt-2" disabled={busy || dollarsToCents(budget) == null} onClick={() => void send("mission-budget", { amount: budget })}>Set mission budget</Button>
+    </section>
+  );
 }

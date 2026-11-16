@@ -19,9 +19,22 @@ type FilterId = (typeof FILTERS)[number]["id"];
 
 function inFilter(status: MissionStatus, filter: FilterId): boolean {
   if (filter === "all") return true;
-  if (filter === "yours") return status === "AWAITING_ACCEPTANCE";
+  if (filter === "yours") {
+    return status === "PROPOSED" || status === "PLANNED" || status === "AWAITING_ACCEPTANCE" || status === "REJECTED";
+  }
   if (filter === "closed") return status === "ACCEPTED" || status === "CANCELLED";
-  return status === "PROPOSED" || status === "PLANNED" || status === "AUTHORIZED" || status === "EXECUTING" || status === "REJECTED";
+  return status === "AUTHORIZED" || status === "EXECUTING";
+}
+
+function nextStep(status: MissionStatus): string {
+  if (status === "PROPOSED") return "Needs a strategy";
+  if (status === "PLANNED") return "Waiting for your authorization";
+  if (status === "AUTHORIZED") return "Ready to run";
+  if (status === "EXECUTING") return "In the company";
+  if (status === "AWAITING_ACCEPTANCE") return "Waiting for you to accept";
+  if (status === "ACCEPTED") return "On the record";
+  if (status === "REJECTED") return "Sent back to you";
+  return "Closed";
 }
 
 function MissionsPage() {
@@ -44,10 +57,17 @@ function MissionsPage() {
 }
 
 function List() {
-  const { data, error, loading } = useCompany<CommandCenter>("command");
+  const { data, error, loading, reload } = useCompany<CommandCenter>("command");
   const [filter, setFilter] = useState<FilterId>("all");
   if (loading && !data) return <p className="py-8 text-sm text-muted">Loading missions</p>;
-  if (!data) return <Alert>{error ?? "Missions did not load."}</Alert>;
+  if (!data) {
+    return (
+      <div className="py-8">
+        <Alert>{error ?? "Missions did not load."}</Alert>
+        <button type="button" className="mt-3 text-sm text-accent" onClick={reload}>Retry</button>
+      </div>
+    );
+  }
   const shown = data.missions.filter((mission) => inFilter(mission.status, filter));
   return (
     <div className="py-6">
@@ -103,7 +123,7 @@ function MissionRow({ mission }: { mission: MissionSummary }) {
         </span>
         <span className="mt-1 line-clamp-2 block text-sm text-muted">{mission.objective}</span>
         <span className="mt-1 block font-mono text-xs text-muted tabular-nums">
-          {mission.done}/{mission.total || "—"} departments
+          {nextStep(mission.status)} · {mission.done}/{mission.total || "—"} departments
         </span>
       </Link>
     </li>

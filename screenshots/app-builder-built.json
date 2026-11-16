@@ -1,5 +1,41 @@
 {
-  "ok": false,
   "url": "http://127.0.0.1:8081/",
-  "error": "page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:8081/\nCall log:\n  - navigating to \"http://127.0.0.1:8081/\", waiting until \"domcontentloaded\"\n"
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "ADL NEXUS",
+      "hasCanvas": false,
+      "bodyTextLen": 1011,
+      "bodyTextHash": "252a1b6c58d6d0d8cb42e0e502f813c8d1c4ca12c69adcac23f1fbf819b89ad3",
+      "bodyTextPrefix": "Atomic Dream Labs NEXUS 2.0 Sign in Command Missions Workforce O",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "ADL NEXUS",
+      "hasCanvas": false,
+      "bodyTextLen": 1011,
+      "bodyTextHash": "252a1b6c58d6d0d8cb42e0e502f813c8d1c4ca12c69adcac23f1fbf819b89ad3",
+      "bodyTextPrefix": "Atomic Dream Labs NEXUS 2.0 Sign in Command Missions Workforce O",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": true,
+  "baselineReasons": [
+    "desktop: body text replaced (similar length, page start changed)",
+    "mobile: body text replaced (similar length, page start changed)"
+  ]
 }

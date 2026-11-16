@@ -52,13 +52,16 @@ function BlueprintPage() {
         <Section title="Honest limits">
           <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted">
             <li>One workspace per signed-in owner.</li>
-            <li>After you authorize, Run the company walks the remaining departments and updates the record after each one. It stops if quality fails. Leaving the page stops the walk. Coming back reloads the record, and a run older than 90 seconds is released.</li>
-            <li>Accepted missions become verified memory, including a short specification and the implementation. The next plan and every department read that memory. Unaccepted drafts do not.</li>
-            <li>A rejected packet can return to the plan. The departments run again. Rewriting the strategy is allowed after a rejection, even if work already ran.</li>
+            <li>Quality runs the implementation under OS limits: memory, CPU time, process count, file size, no network, and a private temp directory that is removed afterward. A throw, a missing control, a request for network or storage, or a missing limit fails the mission. A passing report is tied to that exact hash. Editing the implementation afterwards does not keep the pass.</li>
+            <li>A mission can wait on another mission. Execution will not start until that mission is accepted. A dependency that loops is refused.</li>
+            <li>Operations can run, pause, or stop the scheduler. While it is running, it starts the next authorized department and survives a restart. It does not authorize a plan, accept a packet, or change who owns the company. A lease older than 90 seconds cannot save.</li>
+            <li>Confidential missions stay in this workspace even if public disclosure is on. Internal missions may use the free model only when that disclosure is on. Each dispatch records the provider, the model, the classification, and the execution id.</li>
+            <li>An answer you save is read by the next plan and by every department. It does not authorize execution.</li>
+            <li>A rejected packet can be rewritten, or the departments can be reset so the same plan runs again. Accepted work is not reopened.</li>
             <li>A recorded payment can be voided. The row stays, the total drops it, and voiding is not a refund.</li>
             <li>Rewriting a plan replaces that mission's unverified strategy. A verified decision stays.</li>
-            <li>Department writing uses GPT-OSS 20B through a free public endpoint. It does not spend model credits. If that endpoint is down, the local orchestrator writes the step and says so.</li>
-            <li>Quality checks length, a fenced page, a usable control, and self-approval. It does not run the slice as a product test.</li>
+            <li>Department writing uses GPT-OSS 20B only when Governance allows the public model. Local mode keeps the objective in this workspace. If the model is down or the rate limit is hit, the local orchestrator writes the step and says so.</li>
+            <li>Accepted missions become memory the next plan can read. A later acceptance of the same decision supersedes the older one. Proposed and contested notes are not treated as facts.</li>
             <li>The company record stays when you come back. A published deploy uses the hosted database when one is configured.</li>
             <li>A failed check is an open defect. Fix and retest redoes the department that owns it, then verifies again. A later pass closes the defect.</li>
             <li>The old project and task boards are closed. They do not run work.</li>

@@ -3,7 +3,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { PayCard } from "@/components/company-notes";
 import { Shell, useReadySession } from "@/components/shell";
 import { Alert, Button, controlClass, when } from "@/components/nexus-ui";
-import { formatMoney, dollarsToCents } from "@/lib/nexus/company";
+import { DEPARTMENTS, formatMoney, dollarsToCents } from "@/lib/nexus/company";
 import { companyCommand } from "@/lib/nexus/company-api";
 import type { PaymentsView } from "@/lib/nexus/company-store";
 import { errorText, useCompany } from "@/lib/nexus/use-company";
@@ -27,6 +27,7 @@ function Ledger() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [missionId, setMissionId] = useState("");
+  const [department, setDepartment] = useState("");
   const [busy, setBusy] = useState(false);
   const [voiding, setVoiding] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -37,11 +38,12 @@ function Ledger() {
     setBusy(true);
     setFormError(null);
     try {
-      await companyCommand({ data: { type: "record-payment", payer, amount, note, missionId } });
+      await companyCommand({ data: { type: "record-payment", payer, amount, note, missionId, department } });
       setPayer("");
       setAmount("");
       setNote("");
       setMissionId("");
+      setDepartment("");
       reload();
     } catch (err) {
       setFormError(errorText(err));
@@ -51,7 +53,14 @@ function Ledger() {
   }
 
   if (loading && !data) return <p className="py-8 text-sm text-muted">Loading payments</p>;
-  if (!data) return <Alert>{error ?? "Payments did not load."}</Alert>;
+  if (!data) {
+    return (
+      <div className="py-8">
+        <Alert>{error ?? "Payments did not load."}</Alert>
+        <button type="button" className="mt-3 text-sm text-accent" onClick={reload}>Retry</button>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-10 py-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -61,6 +70,14 @@ function Ledger() {
           {data.destination.business} is paid at {data.destination.cashtag}. This ledger is what you write down after the money arrives. It is not a receipt from Cash App.
         </p>
         <p className="mt-4 font-mono text-lg tabular-nums">Recorded {formatMoney(data.totalCents)}</p>
+        <p className="mt-2 max-w-xl text-sm text-muted">
+          Reserved {formatMoney(data.finance.reservedCents)}. Estimates {formatMoney(data.finance.estimateCents)} are not charges.
+          {data.finance.ceilingCents == null
+            ? " No spending ceiling is set, so remaining budget is not shown."
+            : ` Ceiling ${formatMoney(data.finance.ceilingCents)}. Remaining ${formatMoney(data.finance.remainingCents ?? 0)}.`}
+        </p>
+        <Ceiling busy={busy} onDone={reload} onError={setFormError} />
+        <DepartmentBudget busy={busy} onDone={reload} onError={setFormError} />
 
         <form onSubmit={(event) => void submit(event)} className="mt-8 max-w-xl space-y-3">
           <label className="block text-sm">
@@ -78,6 +95,15 @@ function Ledger() {
               <option value="">Not tied to a mission</option>
               {data.missions.map((mission) => (
                 <option key={mission.id} value={mission.id}>{mission.title}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            Department
+            <select value={department} onChange={(event) => setDepartment(event.target.value)} className={`${controlClass} mt-1 h-11`}>
+              <option value="">Company ceiling only</option>
+              {DEPARTMENTS.map((item) => (
+                <option key={item.slug} value={item.slug}>{item.name}</option>
               ))}
             </select>
           </label>
@@ -150,5 +176,61 @@ function Ledger() {
       </div>
       <PayCard poster />
     </div>
+  );
+}
+
+function Ceiling({ busy, onDone, onError }: { busy: boolean; onDone: () => void; onError: (message: string | null) => void }) {
+  const [amount, setAmount] = useState("");
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    onError(null);
+    try {
+      await companyCommand({ data: { type: "ceiling", amount } });
+      setAmount("");
+      onDone();
+    } catch (err) {
+      onError(errorText(err));
+    }
+  }
+  return (
+    <form onSubmit={(event) => void save(event)} className="mt-4 max-w-sm">
+      <label className="block text-sm">
+        Spending ceiling
+        <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="100.00" className={`${controlClass} mt-1 h-11`} />
+      </label>
+      <Button type="submit" variant="quiet" className="mt-2" disabled={busy || dollarsToCents(amount) == null}>Set ceiling</Button>
+      <p className="mt-2 text-sm text-muted">Only you can raise or lower this. It does not move money, and it does not change payments already recorded.</p>
+    </form>
+  );
+}
+
+function DepartmentBudget({ busy, onDone, onError }: { busy: boolean; onDone: () => void; onError: (message: string | null) => void }) {
+  const [slug, setSlug] = useState(DEPARTMENTS[0]?.slug ?? "engineering");
+  const [amount, setAmount] = useState("");
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    onError(null);
+    try {
+      await companyCommand({ data: { type: "department-budget", note: slug, amount } });
+      setAmount("");
+      onDone();
+    } catch (err) {
+      onError(errorText(err));
+    }
+  }
+  return (
+    <form onSubmit={(event) => void save(event)} className="mt-4 max-w-sm">
+      <label className="block text-sm">
+        Department allocation
+        <select value={slug} onChange={(event) => setSlug(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-line bg-bg px-3 text-sm">
+          {DEPARTMENTS.map((department) => (
+            <option key={department.slug} value={department.slug}>{department.name}</option>
+          ))}
+        </select>
+      </label>
+      <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="40.00" className={`${controlClass} mt-2 h-11`} />
+      <Button type="submit" variant="quiet" className="mt-2" disabled={busy || dollarsToCents(amount) == null}>Set allocation</Button>
+      <p className="mt-2 text-sm text-muted">Applies when a charge names that department. A blank department is checked only against the company ceiling and the mission budget.</p>
+    </form>
   );
 }

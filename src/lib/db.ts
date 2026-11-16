@@ -35,6 +35,7 @@ export interface Sql {
     text: string,
     params?: unknown[],
   ): Promise<T[]>;
+  transaction<T>(fn: (tx: Sql) => Promise<T>): Promise<T>;
 }
 
 /**
@@ -94,10 +95,29 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl });
-    return toSql(async <T>(text: string, params: unknown[]) => {
+    const sql = toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
     });
+    sql.transaction = async <T>(fn: (tx: Sql) => Promise<T>): Promise<T> => {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const tx = toSql(async <R>(text: string, params: unknown[]) => {
+          const res = await client.query(text, params);
+          return res.rows as R[];
+        });
+        const result = await fn(tx);
+        await client.query("commit");
+        return result;
+      } catch (error) {
+        await client.query("rollback").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+    };
+    return sql;
   })().catch((err) => {
     globalRef.__pgSqlPromise__ = undefined;
     throw err;
@@ -156,6 +176,23 @@ async function createPgliteSql(): Promise<Sql> {
         await tx.query("insert into _migrations (name) values ($1)", [name]);
       });
     }
+    try {
+      await pg.exec(`
+      with expired as (
+        update execution_jobs set status = 'expired', updated_at = now()
+        where status = 'leased' and leased_until < now()
+        returning fence, assignment_id
+      )
+      update assignments a
+      set status = 'READY', model = '', run_token = '',
+          error = 'The lease expired before the run could save.', updated_at = now()
+      from expired e
+      where a.id = e.assignment_id and a.status = 'RUNNING' and a.run_token = e.fence
+    `);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/execution_jobs|undefined_table|42P01/i.test(message)) throw error;
+    }
   };
   const pass = (globalRef.__pgliteMigrateChain__ ?? Promise.resolve())
     .catch(() => undefined) // an earlier failed pass must not wedge the chain
@@ -163,10 +200,25 @@ async function createPgliteSql(): Promise<Sql> {
   globalRef.__pgliteMigrateChain__ = pass;
   await pass;
 
-  return toSql(async <T>(text: string, params: unknown[]) => {
-    const result = await pg.query<T>(text, params);
-    return result.rows;
-  });
+  return withPgliteTransaction(
+    toSql(async <T>(text: string, params: unknown[]) => {
+      const result = await pg.query<T>(text, params);
+      return result.rows;
+    }),
+    pg,
+  );
+}
+
+function withPgliteTransaction(sql: Sql, pg: import("@electric-sql/pglite").PGlite): Sql {
+  sql.transaction = async <T>(fn: (tx: Sql) => Promise<T>): Promise<T> =>
+    pg.transaction(async (tx) => {
+      const inner = toSql(async <R>(text: string, params: unknown[]) => {
+        const result = await tx.query<R>(text, params);
+        return result.rows;
+      });
+      return fn(inner);
+    });
+  return sql;
 }
 
 let sqlPromise: Promise<Sql> | null = null;
