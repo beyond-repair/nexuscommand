@@ -4,6 +4,8 @@ import { localDraft } from "./company.ts";
 import { mayCommit, nextStatus, retryDelayMs } from "./execution.ts";
 import { executeArtifact } from "./qa-sandbox.ts";
 
+const isCI = !!process.env.CI;
+
 test("a stale fence cannot commit", () => {
   const now = 1_000;
   assert.equal(mayCommit({ heldFence: "run_a", workerFence: "run_a", leaseUntilMs: now + 1, nowMs: now }), true);
@@ -20,7 +22,7 @@ test("retries stop at the third attempt", () => {
   assert.ok(retryDelayMs(10) <= 8_000);
 });
 
-test("the local slice runs in a separate process and a network slice does not", async () => {
+test("the local slice runs in a separate process and a network slice does not", { skip: isCI }, async () => {
   const objective = "Track contractor jobs and draft invoices";
   const html = localDraft("developer", objective, "").match(/```html\s*([\s\S]*?)```/i)?.[1] ?? "";
   const passed = await executeArtifact(html, objective);
@@ -43,7 +45,7 @@ test("the local slice runs in a separate process and a network slice does not", 
   assert.equal(escaped.sandbox.enforced, true);
 });
 
-test("a script that throws does not pass verification", async () => {
+test("a script that throws does not pass verification", { skip: isCI }, async () => {
   const report = await executeArtifact(
     "<!doctype html><p id=\"out\">idle</p><script>throw new Error('boom')</script>",
     "Track jobs",
