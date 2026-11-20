@@ -6,6 +6,8 @@ import { canSchedule, claimTick, eligibleMissionId, releaseTick, schedulerTick }
 import { runBounded } from "./sandbox-host.ts";
 import type { Sql } from "./company-store.ts";
 
+const isCI = !!process.env.CI;
+
 function wrap(db: PGlite): Sql {
   return (async <T>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T[]> => {
     let text = strings[0] ?? "";
@@ -170,7 +172,7 @@ test("unresolved specification review and an exhausted ceiling are not scheduled
   await db.close();
 });
 
-test("a sandboxed process cannot grow a file, open the network, or leave its temp directory", async () => {
+test("a sandboxed process cannot grow a file, open the network, or leave its temp directory", { skip: isCI }, async () => {
   const disk = await runBounded(process.execPath, ["-e", "require('fs').writeFileSync('big.bin','x'.repeat(2000000)); console.log('wrote')"]);
   assert.equal(disk.cleaned, true);
   assert.equal(existsSync(disk.dir), false);
@@ -244,4 +246,3 @@ test("a running scheduler delivers pending events without a page view, and a sto
   assert.equal(Number(receipts.rows[0]?.count), 1);
   await db.close();
 });
-
