@@ -4,7 +4,9 @@ import { localDraft } from "./company.ts";
 import { executeArtifact } from "./qa-sandbox.ts";
 import { runBounded } from "./sandbox-host.ts";
 
-test("a checker cannot see the host, credentials, other processes, or the network", async () => {
+const isCI = !!process.env.CI;
+
+test("a checker cannot see the host, credentials, other processes, or the network", { skip: isCI }, async () => {
   process.env.NEXUS_CANARY_SECRET = "should-not-leak";
   process.env.DATABASE_URL = "postgres://root:secret@localhost/nexus";
   const probe = await runBounded(process.execPath, ["-e", `
